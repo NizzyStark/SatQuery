@@ -1,0 +1,13 @@
+tools:
+  vqa:
+    inputs: single_image
+    params: {max_new_tokens: [16, 128]}
+  caption:
+    inputs: single_image
+    params: {detail: [brief, detailed]}
+  change_analyze:
+    inputs: bitemporal
+    params: {mode: [describe, vqa], diff_threshold: [0.1, 0.5]}
+  optsar_analyze:
+    inputs: optical_sar
+    params: {targets: [built_up, water, both]}
