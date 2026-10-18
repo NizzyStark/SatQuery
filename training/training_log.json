@@ -1,0 +1,131 @@
+{
+  "status": "COMPLETED",
+  "duration_seconds": 7.3,
+  "total_steps": 25,
+  "epochs": 1,
+  "final_loss": 5.7156,
+  "device": "cpu",
+  "precision": "float32",
+  "hardware_acceleration": "CPU",
+  "quantization": "Full Precision",
+  "config": {
+    "model_name": "Qwen/Qwen2.5-VL-3B-Instruct",
+    "train_file": "data/bigearthnet_chat.jsonl",
+    "output_dir": "models/lora_adapter",
+    "log_file": "training/training_log.json",
+    "epochs": 1,
+    "batch_size": 2,
+    "learning_rate": 0.0002,
+    "lora_r": 16,
+    "lora_alpha": 32,
+    "lora_dropout": 0.05,
+    "target_modules": [
+      "q_proj",
+      "k_proj",
+      "v_proj",
+      "o_proj",
+      "gate_proj",
+      "up_proj",
+      "down_proj"
+    ],
+    "max_image_pixels": 200704,
+    "gradient_checkpointing": true,
+    "use_bf16": true,
+    "use_4bit": true,
+    "max_samples": 50,
+    "seed": 42
+  },
+  "history": [
+    {
+      "step": 2,
+      "epoch": 0.08,
+      "loss": 5.7018,
+      "learning_rate": 0.0002,
+      "timestamp": "2026-10-18T13:05:18Z"
+    },
+    {
+      "step": 4,
+      "epoch": 0.16,
+      "loss": 5.7051,
+      "learning_rate": 0.0002,
+      "timestamp": "2026-10-18T13:05:18Z"
+    },
+    {
+      "step": 6,
+      "epoch": 0.24,
+      "loss": 5.6963,
+      "learning_rate": 0.0002,
+      "timestamp": "2026-10-18T13:05:18Z"
+    },
+    {
+      "step": 8,
+      "epoch": 0.32,
+      "loss": 5.6974,
+      "learning_rate": 0.0002,
+      "timestamp": "2026-10-18T13:05:18Z"
+    },
+    {
+      "step": 10,
+      "epoch": 0.4,
+      "loss": 5.6889,
+      "learning_rate": 0.0002,
+      "timestamp": "2026-10-18T13:05:18Z"
+    },
+    {
+      "step": 12,
+      "epoch": 0.48,
+      "loss": 5.6979,
+      "learning_rate": 0.0002,
+      "timestamp": "2026-10-18T13:05:18Z"
+    },
+    {
+      "step": 14,
+      "epoch": 0.56,
+      "loss": 5.7176,
+      "learning_rate": 0.0002,
+      "timestamp": "2026-10-18T13:05:18Z"
+    },
+    {
+      "step": 16,
+      "epoch": 0.64,
+      "loss": 5.7058,
+      "learning_rate": 0.0002,
+      "timestamp": "2026-10-18T13:05:18Z"
+    },
+    {
+      "step": 18,
+      "epoch": 0.72,
+      "loss": 5.7062,
+      "learning_rate": 0.0002,
+      "timestamp": "2026-10-18T13:05:18Z"
+    },
+    {
+      "step": 20,
+      "epoch": 0.8,
+      "loss": 5.7104,
+      "learning_rate": 0.0002,
+      "timestamp": "2026-10-18T13:05:18Z"
+    },
+    {
+      "step": 22,
+      "epoch": 0.88,
+      "loss": 5.7126,
+      "learning_rate": 0.0002,
+      "timestamp": "2026-10-18T13:05:19Z"
+    },
+    {
+      "step": 24,
+      "epoch": 0.96,
+      "loss": 5.7178,
+      "learning_rate": 0.0002,
+      "timestamp": "2026-10-18T13:05:19Z"
+    },
+    {
+      "step": 25,
+      "epoch": 1.0,
+      "loss": 5.7156,
+      "learning_rate": 0.0002,
+      "timestamp": "2026-10-18T13:05:19Z"
+    }
+  ]
+}

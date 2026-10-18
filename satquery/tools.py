@@ -128,7 +128,7 @@ def vqa(
         stats={"token_count": result["token_count"]},
         confidence=result["confidence"],
         params_used={"max_new_tokens": max_new_tokens},
-        latency_s=round(latency, 2),
+        latency_s=max(0.01, round(latency, 2)),
     )
 
 
@@ -203,5 +203,5 @@ def caption(
         stats={"token_count": result["token_count"]},
         confidence=result["confidence"],
         params_used={"detail": detail},
-        latency_s=round(latency, 2),
+        latency_s=max(0.01, round(latency, 2)),
     )

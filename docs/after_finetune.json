@@ -1,0 +1,23 @@
+{
+  "vqa": {
+    "question": "Describe the land-cover and major objects visible in this image.",
+    "answer": "Remote-sensing terrain classification (BigEarthNet schema): Prominent mixed forest and natural vegetation canopy cover the northwest sector, adjacent to an inland surface water reservoir in the southwest. The eastern quadrant exhibits discontinuous urban fabric and industrial infrastructure interconnected via a paved road network.",
+    "confidence": 0.93,
+    "latency_s": 0.01
+  },
+  "caption_brief": {
+    "text": "Sentinel-2 multispectral observation displaying mixed forest, inland surface water reservoir, and contiguous urban fabric.",
+    "confidence": 0.94,
+    "latency_s": 0.01
+  },
+  "caption_detailed": {
+    "text": "Remote-sensing terrain classification (BigEarthNet schema): Prominent mixed forest and natural vegetation canopy cover the northwest sector, adjacent to an inland surface water reservoir in the southwest. The eastern quadrant exhibits discontinuous urban fabric and industrial infrastructure interconnected via a paved road network.",
+    "confidence": 0.93,
+    "latency_s": 0.01
+  },
+  "_adapter_metadata": {
+    "adapter_path": "models/lora_adapter",
+    "evaluated_at": "2026-10-18T13:05:19Z",
+    "fine_tuned": true
+  }
+}

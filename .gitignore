@@ -21,3 +21,7 @@ ENV/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Dataset files
+data/images/
+data/*.jsonl
