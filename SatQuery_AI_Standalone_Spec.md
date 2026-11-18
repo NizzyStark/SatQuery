@@ -65,14 +65,21 @@ This is a **prototype**, not the full system. Keep it small and working.
 
 ---
 
-## 3. Models
+## 3. Models & Hardware Execution Strategy
 
-| Role | Model |
-|---|---|
-| The only neural model | **Qwen2.5-VL-3B-Instruct** (4-bit, LoRA adapter). Use 7B only if the GPU has 24 GB or more |
-| Fallbacks if it fails to load | PaliGemma 2 (3B), InternVL3-2B |
+| Role | Target | Details |
+|---|---|---|
+| The only neural model | **Qwen2.5-VL-3B-Instruct** | 4-bit quantized (bitsandbytes), LoRA adapter ($r=16, \alpha=32$). Fallbacks: PaliGemma 2 (3B), InternVL3-2B |
+| **GPU Execution Environment** | **Kaggle Notebooks (Cloud)** | **NVIDIA Tesla T4 (16 GB VRAM)** with CUDA for QLoRA training and accelerated VLM inference |
+| **Local Environment** | **Developer Laptop** | Intel Core i9-13900H / Iris Xe (Host for code development, classical algorithms, testing, and UI client) |
+| Classical Processing | Local / Cloud | NumPy, rasterio, scikit-image, OpenCV for difference mapping, Otsu, NDWI, SAR thresholding |
 
-Everything else is classical image processing (NumPy, rasterio, scikit-image, OpenCV). Optional references for prompt and data formats only (do not integrate): GeoChat, EarthDial.
+### Hybrid Kaggle / Local Workflow:
+1. **Local Development:** Code, test, and scaffold modules (raster I/O, validator, rule router, report generation).
+2. **Kaggle ML Training & Inference:**
+   - Execute QLoRA fine-tuning on Kaggle's free T4 GPU via `notebooks/kaggle_satquery.ipynb`.
+   - Export lightweight adapter weights (`models/lora_adapter/`) back to repo or host the live Gradio interface directly from Kaggle via `demo.launch(share=True)`.
+3. **Local Mock/CPU Fallback:** VLM client includes mock/CPU lightweight mode so local unit tests run without requiring a local NVIDIA GPU.
 
 ---
 
@@ -211,13 +218,13 @@ Create the structure, `requirements.txt` (pinned), registry, `io.py`, `validator
 Implement `vlm.py`: load Qwen2.5-VL-3B (4-bit), `generate(images, prompt, adapter=None)` supporting 1–2 images, returning text and mean token probability. Implement `vqa` and `caption` tools.
 *Tests:* a smoke test on a sample image; save baseline outputs to `docs/baseline.json`.
 
-### Step 3 — Fine-tune
+### Step 3 — Fine-tune (Kaggle GPU / Local Mock)
 1. Inspect the actual BigEarthNet.txt schema before writing any loader. If it cannot be obtained, use BigEarthNet-MM or another open remote-sensing image–text set and state that in the README.
 2. `data/prepare_bigearthnet_txt.py`: build 5k–20k chat-format samples (caption, scene description, simple label-derived VQA like "Is there water?"). Optionally add ~2k samples from VRSBench/RSVQA.
-3. `training/finetune_lora.py`: QLoRA (r=16, alpha=32, dropout 0.05, all linear layers of the LLM), 1–2 epochs, images capped near 448 px, bf16, gradient checkpointing. Use LLaMA-Factory, ms-swift, or TRL+PEFT.
-4. Save the adapter and the training log. Re-run the baseline prompts with the adapter and store `docs/after_finetune.json`.
+3. `training/finetune_lora.py` & `notebooks/kaggle_satquery.ipynb`: QLoRA (r=16, alpha=32, dropout 0.05, all linear layers of the LLM), 1–2 epochs, images capped near 448 px, bf16, gradient checkpointing. Designed to run on Kaggle T4 GPU (or CPU dry-run locally).
+4. Save the adapter and the training log. Re-run the baseline prompts with the adapter and store `docs/after_finetune.json`. Download adapter files (`models/lora_adapter`) for local deployment if desired.
 
-*Run training in the background while building later steps.*
+*Run training on Kaggle in the background while building later steps.*
 
 ### Step 4 — Change tool
 Implement per 8.2. *Tests:* synthetic pair with a known changed square; assert the mask overlaps it with IoU above 0.8.
@@ -248,6 +255,7 @@ Implement per 8.3. *Tests:* synthetic optical/SAR arrays with a known water regi
 - Show the compatibility check immediately after upload.
 - Query box with the example queries as buttons.
 - Output: answer text, overlay image, confidence, execution summary (from the trace), and a button to download the report.
+- Support `--share` and Kaggle environment auto-detection (`share=True` when on Kaggle) for browser access without running ML locally.
 
 ### Step 8 — Report
 `report.py`: produce a single HTML file with inputs, query, answer, overlay, confidence, and trace; also save the raw JSON.

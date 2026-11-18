@@ -10,7 +10,11 @@ from pathlib import Path
 from typing import Any
 import numpy as np
 from PIL import Image, ImageColor
-import rasterio
+
+try:
+    import rasterio
+except (ImportError, Exception):
+    rasterio = None
 
 
 def detect_modality(array: np.ndarray, user_tag: str | None = None) -> str:
@@ -67,6 +71,11 @@ def load_image(path: str | Path, modality: str | None = None) -> dict[str, Any]:
     suffix = file_path.suffix.lower()
 
     if suffix in (".tif", ".tiff", ".geotiff"):
+        if rasterio is None:
+            raise ImportError(
+                "rasterio is required to load GeoTIFF files but could not be imported. "
+                "Install it with: pip install rasterio"
+            )
         with rasterio.open(file_path) as src:
             array = src.read()  # Shape: (count, height, width)
             crs_str = src.crs.to_string() if src.crs else None

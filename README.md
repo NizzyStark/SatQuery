@@ -30,10 +30,22 @@ satquery/
 └── demo/                              # Demo sample imagery
 ```
 
-## Quick Start
+## Quick Start & Hardware Architecture
+
+SatQuery AI supports two modes:
+1. **Local Development (CPU / Lightweight):** Run raster I/O, compatibility validators, rule routers, change detection, and report generation locally on your PC.
+2. **Kaggle GPU Cloud (Accelerated ML):** Train the QLoRA adapter and run the full Qwen2.5-VL-3B model with GPU acceleration (NVIDIA Tesla T4 with 16 GB VRAM) on Kaggle.
+
+### Running on Kaggle GPU (Recommended for ML & Training)
+Open the pre-configured notebook [`notebooks/kaggle_satquery.ipynb`](notebooks/kaggle_satquery.ipynb) in Kaggle with the **GPU T4** accelerator turned on:
+1. Automatically prepares dataset and runs QLoRA fine-tuning in ~5-10 minutes.
+2. Allows downloading the trained adapter (`satquery_adapter.zip`) to `models/lora_adapter/`.
+3. Launches the interactive Gradio demo with `share=True` so you can use the web app from any browser.
+
+### Running Locally
 ```bash
 pip install -r requirements.txt
-pytest
+python -m pytest tests
 python app.py
 ```
 
