@@ -20,7 +20,7 @@ from typing import Any
 
 import numpy as np
 from PIL import Image
-from scipy.ndimage import gaussian_filter, label as ndimage_label
+from scipy.ndimage import gaussian_filter, uniform_filter, label as ndimage_label
 from skimage.filters import threshold_otsu
 from skimage.morphology import opening, closing, disk
 
@@ -496,5 +496,378 @@ def change_analyze(
             "diff_threshold": diff_threshold,
             "threshold_actual": round(threshold_used, 4),
         },
+        latency_s=max(0.01, round(latency, 2)),
+    )
+
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  Tool 4 — Optical–SAR Analysis (Multi-sensor Fusion)
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def _extract_optical_features(
+    arr_opt: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray, dict[str, bool]]:
+    """Extract water and built-up masks from optical raster data.
+
+    Parameters
+    ----------
+    arr_opt : np.ndarray
+        Optical array of shape (bands, H, W).
+
+    Returns
+    -------
+    water_mask : np.ndarray (H, W) bool
+    buildup_mask : np.ndarray (H, W) bool
+    fallbacks : dict[str, bool]
+        Flags indicating whether fallbacks were used.
+    """
+    bands, h, w = arr_opt.shape
+    arr = arr_opt.astype(np.float64)
+    fallbacks = {"optical_water_fallback": False, "optical_buildup_fallback": False}
+
+    if bands >= 4:
+        # Multispectral (e.g. Sentinel-2: B2=0, B3=1 Green, B4=2 Red, B8=3 NIR)
+        green = arr[1]
+        red = arr[2]
+        nir = arr[3]
+
+        # NDWI = (Green - NIR) / (Green + NIR)
+        denom_water = green + nir + 1e-8
+        ndwi = (green - nir) / denom_water
+        water_mask = ndwi > 0.0
+
+        if bands >= 5:
+            # SWIR exists (band 4) -> NDBI = (SWIR - NIR) / (SWIR + NIR)
+            swir = arr[4]
+            ndbi = (swir - nir) / (swir + nir + 1e-8)
+            buildup_mask = (ndbi > 0.0) & (~water_mask)
+        else:
+            # 4-band fallback: low NDVI + high visible brightness
+            fallbacks["optical_buildup_fallback"] = True
+            ndvi = (nir - red) / (nir + red + 1e-8)
+            vis_brightness = (arr[0] + green + red) / 3.0
+            p70 = float(np.percentile(vis_brightness, 70))
+            buildup_mask = (vis_brightness > p70) & (ndvi < 0.2) & (~water_mask)
+    elif bands == 3:
+        # RGB colour-based fallback
+        fallbacks["optical_water_fallback"] = True
+        fallbacks["optical_buildup_fallback"] = True
+
+        r, g, b = arr[0], arr[1], arr[2]
+        total = r + g + b + 1e-8
+        blue_ratio = b / total
+
+        # Water: dominant blue reflectance and blue > red
+        water_mask = (blue_ratio > 0.38) & (b > r * 1.1)
+
+        # Built-up: high overall brightness + moderate/low saturation
+        brightness = total / 3.0
+        p70 = float(np.percentile(brightness, 70))
+        buildup_mask = (brightness > p70) & (~water_mask)
+    else:
+        # Single-band grayscale fallback
+        fallbacks["optical_water_fallback"] = True
+        fallbacks["optical_buildup_fallback"] = True
+
+        gray = arr[0]
+        lo = float(np.percentile(gray, 20))
+        hi = float(np.percentile(gray, 80))
+        water_mask = gray < lo
+        buildup_mask = gray > hi
+
+    # Morphological cleanup
+    selem = disk(1)
+    water_mask = opening(water_mask.astype(np.uint8), selem).astype(bool)
+    buildup_mask = opening(buildup_mask.astype(np.uint8), selem).astype(bool)
+
+    return water_mask, buildup_mask, fallbacks
+
+
+def _extract_sar_features(
+    arr_sar: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Extract water and built-up masks from SAR raster data.
+
+    Parameters
+    ----------
+    arr_sar : np.ndarray
+        SAR array of shape (bands, H, W). Band 0 is VV backscatter.
+
+    Returns
+    -------
+    water_mask : np.ndarray (H, W) bool
+    buildup_mask : np.ndarray (H, W) bool
+    """
+    vv = arr_sar[0].astype(np.float64)
+
+    # Water has specular reflection → very low backscatter
+    vv_range = float(np.nanmax(vv) - np.nanmin(vv))
+    if vv_range > 1e-5:
+        try:
+            # Otsu on the lower mode of backscatter separates specular water from terrain/urban
+            med = float(np.median(vv))
+            lower_mode = vv[vv < med]
+            if len(lower_mode) > 10 and float(np.nanmax(lower_mode) - np.nanmin(lower_mode)) > 1e-5:
+                thr_otsu = float(threshold_otsu(lower_mode))
+            else:
+                thr_otsu = float(threshold_otsu(vv))
+            water_mask = vv < thr_otsu
+        except ValueError:
+            water_mask = vv < float(np.percentile(vv, 20))
+    else:
+        water_mask = np.zeros_like(vv, dtype=bool)
+
+    # Built-up has double-bounce corner reflection → high backscatter + high local texture
+    mean_vv = uniform_filter(vv, size=5)
+    sqr_mean = uniform_filter(vv**2, size=5)
+    var_vv = np.maximum(0.0, sqr_mean - mean_vv**2)
+    std_vv = np.sqrt(var_vv)
+
+    hi_backscatter = vv > float(np.percentile(vv, 75))
+    hi_texture = std_vv > float(np.percentile(std_vv, 70))
+    buildup_mask = hi_backscatter & hi_texture & (~water_mask)
+
+    # Morphological cleanup
+    selem = disk(1)
+    water_mask = opening(water_mask.astype(np.uint8), selem).astype(bool)
+    buildup_mask = opening(buildup_mask.astype(np.uint8), selem).astype(bool)
+
+    return water_mask, buildup_mask
+
+
+def _fuse_optsar(
+    opt_water: np.ndarray,
+    sar_water: np.ndarray,
+    opt_buildup: np.ndarray,
+    sar_buildup: np.ndarray,
+    targets: str = "both",
+) -> tuple[np.ndarray, np.ndarray, dict[str, Any]]:
+    """Fuse optical and SAR detections and compute agreement statistics.
+
+    Parameters
+    ----------
+    opt_water, sar_water : np.ndarray (H, W) bool
+    opt_buildup, sar_buildup : np.ndarray (H, W) bool
+    targets : str
+        "built_up", "water", or "both".
+
+    Returns
+    -------
+    final_water : np.ndarray (H, W) bool
+    final_buildup : np.ndarray (H, W) bool
+    stats : dict[str, Any]
+    """
+    total_pixels = opt_water.size
+
+    # Water fusion
+    water_both = opt_water & sar_water
+    water_any = opt_water | sar_water
+    water_agreement = (
+        float(np.sum(water_both) / np.sum(water_any)) if np.sum(water_any) > 0 else 1.0
+    )
+
+    # Built-up fusion (excluding water)
+    buildup_both = (opt_buildup & sar_buildup) & (~water_any)
+    buildup_any = (opt_buildup | sar_buildup) & (~water_any)
+    buildup_agreement = (
+        float(np.sum(buildup_both) / np.sum(buildup_any)) if np.sum(buildup_any) > 0 else 1.0
+    )
+
+    final_water = water_any if targets in ("water", "both") else np.zeros_like(opt_water, dtype=bool)
+    final_buildup = buildup_any if targets in ("built_up", "both") else np.zeros_like(opt_buildup, dtype=bool)
+
+    water_pct = round(100.0 * float(np.sum(water_any)) / total_pixels, 2)
+    water_both_pct = round(100.0 * float(np.sum(water_both)) / total_pixels, 2)
+    buildup_pct = round(100.0 * float(np.sum(buildup_any)) / total_pixels, 2)
+    buildup_both_pct = round(100.0 * float(np.sum(buildup_both)) / total_pixels, 2)
+
+    stats = {
+        "water_pct": water_pct,
+        "water_both_pct": water_both_pct,
+        "water_agreement_ratio": round(water_agreement, 4),
+        "built_up_pct": buildup_pct,
+        "built_up_both_pct": buildup_both_pct,
+        "built_up_agreement_ratio": round(buildup_agreement, 4),
+        "total_pixels": total_pixels,
+    }
+
+    return final_water, final_buildup, stats
+
+
+def optsar_analyze(
+    image_dict_optical: dict[str, Any],
+    image_dict_sar: dict[str, Any],
+    targets: str = "both",
+    query: str = "",
+    vlm: VLMClient | None = None,
+    output_dir: str | None = None,
+) -> ToolResult:
+    """Complementary optical–SAR analysis and feature extraction.
+
+    Implements Spec §8.3:
+    1. Optical water: NDWI when NIR exists, else colour-based fallback.
+    2. SAR water: low backscatter (Otsu threshold on dB VV).
+    3. SAR built-up: high backscatter combined with local texture.
+    4. Optical built-up: NDBI if SWIR exists, else brightness/texture fallback.
+    5. Fusion: both agree (high confidence), one only (medium confidence).
+    6. Overlay: blue = water, orange = built-up. Report area percentages.
+    7. VLM narration: summary of what each sensor contributes.
+
+    Parameters
+    ----------
+    image_dict_optical : dict
+        Image dict from ``satquery.io.load_image`` (optical/multispectral).
+    image_dict_sar : dict
+        Image dict from ``satquery.io.load_image`` (SAR).
+    targets : str
+        Target classes to detect: ``"built_up"``, ``"water"``, or ``"both"``.
+    query : str
+        Optional user query to include in the narration prompt.
+    vlm : VLMClient | None
+        Pre-initialised VLM singleton.
+    output_dir : str | None
+        Output directory for the overlay PNG.
+
+    Returns
+    -------
+    ToolResult
+    """
+    t0 = time.perf_counter()
+
+    # ── Validate & clamp parameters ──────────────────────────────────────
+    targets = targets.strip().lower()
+    valid_targets = ("built_up", "water", "both")
+    if targets not in valid_targets:
+        logger.warning(
+            "Unknown target '%s' for optsar_analyze; defaulting to 'both'.", targets
+        )
+        targets = "both"
+
+    # ── 1. Spatial alignment ─────────────────────────────────────────────
+    arr_opt = image_dict_optical["array"]
+    arr_sar = image_dict_sar["array"]
+
+    h_opt, w_opt = arr_opt.shape[1], arr_opt.shape[2]
+    h_sar, w_sar = arr_sar.shape[1], arr_sar.shape[2]
+    align_warnings: list[str] = []
+
+    if (h_opt, w_opt) != (h_sar, w_sar):
+        target_h, target_w = min(h_opt, h_sar), min(w_opt, w_sar)
+        align_warnings.append(
+            f"Optical-SAR size mismatch ({w_opt}×{h_opt} vs {w_sar}×{h_sar}); "
+            f"aligning to ({target_w}×{target_h})."
+        )
+
+        def _resize_arr(arr: np.ndarray, th: int, tw: int) -> np.ndarray:
+            res_bands = []
+            for b in range(arr.shape[0]):
+                p = Image.fromarray(arr[b].astype(np.float32), mode="F")
+                p_res = p.resize((tw, th), resample=Image.Resampling.BILINEAR)
+                res_bands.append(np.array(p_res))
+            return np.stack(res_bands, axis=0)
+
+        if (h_opt, w_opt) != (target_h, target_w):
+            arr_opt = _resize_arr(arr_opt, target_h, target_w)
+        if (h_sar, w_sar) != (target_h, target_w):
+            arr_sar = _resize_arr(arr_sar, target_h, target_w)
+
+    # ── 2–4. Feature extraction ──────────────────────────────────────────
+    opt_water, opt_buildup, fallbacks = _extract_optical_features(arr_opt)
+    sar_water, sar_buildup = _extract_sar_features(arr_sar)
+
+    # ── 5. Sensor fusion ─────────────────────────────────────────────────
+    final_water, final_buildup, fusion_stats = _fuse_optsar(
+        opt_water, sar_water, opt_buildup, sar_buildup, targets=targets
+    )
+
+    # ── 6. Evidence overlay (Blue = water, Orange = built-up) ────────────
+    # Base image is the rendered optical image
+    base_pil = render_for_vlm(image_dict_optical)
+    # Ensure base image matches aligned dimensions
+    if base_pil.size != (final_water.shape[1], final_water.shape[0]):
+        base_pil = base_pil.resize(
+            (final_water.shape[1], final_water.shape[0]),
+            resample=Image.Resampling.BILINEAR,
+        )
+
+    overlay_img = base_pil
+    if targets in ("water", "both") and np.any(final_water):
+        # Blue overlay for water: (30, 144, 255)
+        overlay_img = render_overlay(
+            overlay_img, final_water, color=(30, 144, 255), alpha=0.45
+        )
+    if targets in ("built_up", "both") and np.any(final_buildup):
+        # Orange overlay for built-up: (255, 140, 0)
+        overlay_img = render_overlay(
+            overlay_img, final_buildup, color=(255, 140, 0), alpha=0.45
+        )
+
+    # Save overlay PNG
+    if output_dir is None:
+        output_dir = tempfile.mkdtemp(prefix="satquery_optsar_")
+    out_dir = Path(output_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    overlay_path = out_dir / f"optsar_overlay_{uuid.uuid4().hex[:8]}.png"
+    overlay_img.save(str(overlay_path))
+
+    # ── 7. VLM narration ─────────────────────────────────────────────────
+    vlm_client = vlm or get_vlm()
+
+    pil_opt = render_for_vlm(image_dict_optical)
+    pil_sar = render_for_vlm(image_dict_sar)
+
+    water_pct = fusion_stats["water_pct"]
+    buildup_pct = fusion_stats["built_up_pct"]
+    water_both_pct = fusion_stats["water_both_pct"]
+    buildup_both_pct = fusion_stats["built_up_both_pct"]
+
+    query_context = f"\nUser Query: {query}" if query else ""
+    vlm_prompt = (
+        "You are an expert remote-sensing analyst specializing in optical and SAR fusion. "
+        "Image 1 is the optical image and Image 2 is the co-registered Synthetic Aperture Radar (SAR) image. "
+        f"Multi-sensor feature extraction yields:\n"
+        f"- Water coverage: {water_pct}% (both sensors agree on {water_both_pct}%)\n"
+        f"- Built-up coverage: {buildup_pct}% (both sensors agree on {buildup_both_pct}%)\n"
+        f"- Target analysis focus: {targets}.{query_context}\n\n"
+        "Provide a concise summary explaining:\n"
+        "1. What each sensor contributes (optical spectral reflectance vs SAR backscatter and physical structure).\n"
+        "2. The spatial distribution of water bodies and built-up infrastructure."
+    )
+
+    vlm_result = vlm_client.generate(
+        images=[pil_opt, pil_sar],
+        prompt=vlm_prompt,
+        max_new_tokens=128,
+    )
+
+    # ── Confidence calculation ───────────────────────────────────────────
+    confidence = vlm_result["confidence"]
+    # Boost if high sensor agreement
+    if fusion_stats["water_agreement_ratio"] > 0.5 or fusion_stats["built_up_agreement_ratio"] > 0.5:
+        confidence = min(1.0, confidence + 0.05)
+    # Lower if fallbacks were used
+    if fallbacks["optical_water_fallback"] or fallbacks["optical_buildup_fallback"]:
+        confidence = max(0.0, confidence - 0.05)
+    if align_warnings:
+        confidence = max(0.0, confidence - 0.05)
+
+    stats = {
+        **fusion_stats,
+        **fallbacks,
+        "alignment_warnings": align_warnings,
+        "token_count": vlm_result["token_count"],
+    }
+
+    latency = time.perf_counter() - t0
+
+    return ToolResult(
+        tool="optsar_analyze",
+        text=vlm_result["text"],
+        overlay_png=str(overlay_path),
+        stats=stats,
+        confidence=round(max(0.0, min(1.0, confidence)), 4),
+        params_used={"targets": targets},
         latency_s=max(0.01, round(latency, 2)),
     )
