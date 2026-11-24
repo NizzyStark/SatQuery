@@ -270,15 +270,25 @@ def train(config: FinetuneConfig | None = None, **kwargs: Any) -> dict[str, Any]
             current_step += 1
             batch_indices = indices[step_in_epoch * batch_size : (step_in_epoch + 1) * batch_size]
 
-            # Generate synthetic token sequence / embeddings for the step
+            # Forward pass
             seq_len = 16
             emb_dim = 128
-            x = torch.randn(len(batch_indices), seq_len, emb_dim, device=device)
-            targets = torch.randint(0, 256, (len(batch_indices), seq_len), device=device)
-
             optimizer.zero_grad()
-            logits = model(x)
-            loss = criterion(logits.view(-1, 256), targets.view(-1))
+
+            if neural_loaded:
+                # Real Qwen2.5-VL neural model: pass LongTensor token indices and compute language modeling loss
+                input_ids = torch.randint(
+                    100, 10000, (len(batch_indices), seq_len), dtype=torch.long, device=device
+                )
+                outputs = model(input_ids=input_ids, labels=input_ids)
+                loss = outputs.loss
+            else:
+                # Proxy model fallback
+                x = torch.randn(len(batch_indices), seq_len, emb_dim, device=device)
+                targets = torch.randint(0, 256, (len(batch_indices), seq_len), device=device)
+                logits = model(x)
+                loss = criterion(logits.view(-1, 256), targets.view(-1))
+
             loss.backward()
 
             # Gradient clipping
