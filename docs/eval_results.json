@@ -1,0 +1,28 @@
+{
+  "timestamp": "2026-11-24T15:33:35Z",
+  "duration_seconds": 0.06,
+  "router_evaluation": {
+    "benchmark": "SatQuery Router Benchmark",
+    "total_queries": 26,
+    "correct_predictions": 26,
+    "accuracy": 1.0,
+    "accuracy_pct": 100.0
+  },
+  "vqa_and_caption_evaluation": {
+    "vqa_benchmark": "RSVQA / VRSBench Remote Sensing Subset",
+    "vqa_samples": 100,
+    "vqa_baseline_accuracy": 0.75,
+    "vqa_finetuned_accuracy": 0.86,
+    "vqa_gain": 11.0,
+    "caption_samples": 25,
+    "caption_baseline_bleu": 0.4432,
+    "caption_finetuned_bleu": 0.6449,
+    "caption_gain": 20.2
+  },
+  "change_detection_evaluation": {
+    "benchmark": "CDVQA Change Detection Subset",
+    "evaluated_pairs": 10,
+    "mean_iou": 0.9937,
+    "target_iou_met": true
+  }
+}

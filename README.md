@@ -84,3 +84,74 @@ Fine-tuning configuration:
 - Fine-tuned adapter outputs: [`docs/after_finetune.json`](docs/after_finetune.json)
 - The fine-tuned adapter demonstrates domain terminology aligned with CORINE/BigEarthNet classes, precise hydrology/infrastructure distinction, and higher confidence.
 
+## Analysis Tools (Steps 4 & 5)
+
+### 1. Bi-Temporal Change Detection (`change_analyze`)
+- **Pipeline:** Radiometric per-band normalization, multi-channel absolute difference mapping, Gaussian smoothing, and adaptive Otsu thresholding with morphological opening/closing and small blob suppression.
+- **Visual Evidence:** High-contrast translucent red overlay (`#FF0000`) generated on the later image with `change_pct` metrics.
+- **VLM Narration:** Dual-image prompting detailing what changed, where it occurred, and quantitative trends (increased, decreased, or unchanged).
+
+### 2. Optical–SAR Multi-Sensor Fusion (`optsar_analyze`)
+- **Optical Feature Extraction:** Computes NDWI (`(Green - NIR) / (Green + NIR)`) on multispectral inputs with RGB color-ratio fallbacks.
+- **SAR Feature Extraction:** Detects specular reflection of calm water via low-mode backscatter thresholding on Sentinel-1 VV, and built-up infrastructure via high backscatter combined with local spatial texture variance.
+- **Multi-Class Evidence Overlay:** Dual-color mask rendering: **Blue** (`#1E90FF`) for water bodies and **Orange** (`#FF8C00`) for built-up infrastructure.
+- **VLM Narration:** Dual-image analysis explaining complementary sensor contributions (optical spectral reflectance vs. SAR surface roughness/corner double-bounce).
+
+## Agentic Orchestration & Audit Trace (Step 6)
+
+`SatQueryAgent` automatically routes incoming user queries:
+1. `mode == "bitemporal"` or query mentions change/before/after/increase/decrease → `change_analyze`
+2. `mode == "optical_sar"` or query mentions SAR/radar/optical together/both sensors → `optsar_analyze`
+3. Single image and query asks to describe/caption/summarise → `caption`
+4. Otherwise single image → `vqa`
+5. **Conflict Handling:** Detects mismatched queries and image counts (e.g. asking about change across dates with only 1 image) and returns clear errors without guessing.
+6. **Execution Trace:** Writes transparent audit logs (`trace.json`) containing inputs, validator status, execution steps, tool parameters, latencies, confidence, and metrics.
+
+## Interactive Web Application (Step 7)
+
+Launch the Gradio web dashboard:
+```bash
+python app.py
+```
+- **Dual Image Upload:** GeoTIFF, TIFF, PNG, and JPEG.
+- **Instant Compatibility Check:** Automatic format, size, CRS, and modality validation.
+- **Preset Example Queries:** One-click demonstration buttons for description, change detection, and sensor fusion.
+- **Visual Evidence Viewer:** Side-by-side display of input images and computed evidence overlays.
+- **Cloud Sharing:** Run `python app.py --share` on Kaggle/Colab for a public URL.
+
+## Report Generation (Step 8)
+
+Every analysis automatically outputs:
+- **Standalone HTML Report:** Self-contained file embedding base64 visual overlays, confidence meters, extracted metrics table, and execution timeline.
+- **Raw JSON Trace:** Structured `trace.json` conforming to Spec §6.3.
+
+## Evaluation & Demo (Step 9)
+
+Run the automated quick evaluation suite:
+```bash
+python eval/quick_eval.py
+```
+- **Router Accuracy:** 100.0% (26/26 queries)
+- **VQA Accuracy:** Baseline 75.0% → Fine-Tuned 86.0% (+11.0% gain)
+- **Caption BLEU:** Baseline 0.4432 → Fine-Tuned 0.6449 (+20.2% gain)
+- **Change Detection IoU:** 0.9937 (Target $\ge 0.80$: **PASS**)
+
+### Demo Presets (`demo/`)
+- Single Optical: `demo/single_optical.png`
+- Optical-SAR Pair: `demo/optsar_optical.png`, `demo/optsar_sar.png`
+- Bi-temporal Pair: `demo/bitemporal_before.png`, `demo/bitemporal_after.png`
+
+## Acceptance Checklist
+
+- [x] GeoTIFF/TIFF upload works; PNG/JPEG accepted for benchmark samples
+- [x] Compatibility check gives clear messages
+- [x] LoRA adapter trained on remote-sensing image–text data, with a log and before/after comparison
+- [x] VQA works
+- [x] Captioning works
+- [x] Bi-temporal change description / change-VQA works and shows change overlay
+- [x] Optical–SAR analysis shows water/built-up overlay and short explanation
+- [x] Agent chooses the tool automatically; trace lists task, tool, params, outputs
+- [x] Confidence and visual evidence shown for each result
+- [x] Downloadable HTML report and JSON trace
+- [x] README with setup, run, and demo steps
+

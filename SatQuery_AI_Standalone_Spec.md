@@ -270,17 +270,17 @@ Implement per 8.3. *Tests:* synthetic optical/SAR arrays with a known water regi
 
 ## 10. Acceptance checklist
 
-- [ ] GeoTIFF/TIFF upload works; PNG/JPEG accepted for benchmark samples
-- [ ] Compatibility check gives clear messages
-- [ ] LoRA adapter trained on remote-sensing image–text data, with a log and a before/after comparison
-- [ ] VQA works
-- [ ] Captioning works
-- [ ] Bi-temporal change description / change-VQA works and shows a change overlay
-- [ ] Optical–SAR analysis shows water/built-up overlay and a short explanation
-- [ ] Agent chooses the tool automatically; trace lists task, tool, params, outputs
-- [ ] Confidence and visual evidence shown for each result
-- [ ] Downloadable report
-- [ ] README with setup and demo steps
+- [x] GeoTIFF/TIFF upload works; PNG/JPEG accepted for benchmark samples
+- [x] Compatibility check gives clear messages
+- [x] LoRA adapter trained on remote-sensing image–text data, with a log and a before/after comparison
+- [x] VQA works
+- [x] Captioning works
+- [x] Bi-temporal change description / change-VQA works and shows a change overlay
+- [x] Optical–SAR analysis shows water/built-up overlay and a short explanation
+- [x] Agent chooses the tool automatically; trace lists task, tool, params, outputs
+- [x] Confidence and visual evidence shown for each result
+- [x] Downloadable report
+- [x] README with setup and demo steps
 
 ---
 
