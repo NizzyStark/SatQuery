@@ -18,10 +18,16 @@ import json
 import logging
 import math
 import os
+import sys
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
+
+# Ensure project root is in sys.path so 'data', 'satquery', etc. can be imported
+_project_root = Path(__file__).resolve().parent.parent
+if str(_project_root) not in sys.path:
+    sys.path.insert(0, str(_project_root))
 
 import numpy as np
 from PIL import Image
